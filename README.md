@@ -8,9 +8,23 @@ Dieser Stand enthält die **Vorverarbeitung** (Laserlinien-Detektion + ROI) sowi
 zwei Messmethoden (**Frame Differencing**, **Canny**), inkl. der interaktiven
 HTML-Ansicht (Film + Dickenkurve).
 
+## Schnellstart
+
+```
+1. Repo ziehen
+2. Je Messreihe einen Unterordner mit den *.tif in  input/  ablegen
+   (erstes *.tif = eisfreier Frame 0)
+3. python run.py
+```
+
+`run.py` verarbeitet **alle** Serien in `input/` (Vorverarbeitung -> Frame
+Differencing -> Canny) und schreibt `ergebnis.html` mit Links auf alle Viewer.
+
 ## Struktur
 
 ```
+run.py                  Alle Serien in input/ auswerten
+input/                  ← hier die Bilderserien ablegen (ein Unterordner je Serie)
 pre processing/Bild 0/
     laser_pipeline.py   Laserlinie im Referenzframe (Frame 0) detektieren + fitten
     crop_roi.py         gerundetes ROI-Band um die Laserlinie
@@ -24,7 +38,7 @@ canny ice detection/
 Die Skripte finden einander über relative Pfade (die Ordner liegen als
 Schwesterordner nebeneinander).
 
-## Ablauf
+## Manuell (einzelne Schritte)
 
 Eine Serie = ein Ordner voller `*.tif`. Das **erste** `*.tif` ist Frame 0 und
 muss der **eisfreie** Referenzframe sein.
@@ -34,7 +48,7 @@ muss der **eisfreie** Referenzframe sein.
 python "pre processing/Bild 0/laser_pipeline.py" "PFAD/frame0.tif" --out "pre processing/Bild 0/output"
 python "pre processing/Bild 0/crop_roi.py" --out "pre processing/Bild 0/output" --raw "PFAD/ZUR/SERIE" --stem <frame0-stamm>
 
-# 2) Messmethoden (Serienordner als Argument):
+# 2) Messmethoden (Serienordner als Argument, oder ohne = erste Serie in input/):
 python "frame differencing/serie_eis.py"  "PFAD/ZUR/SERIE"
 python "canny ice detection/canny_eis.py" "PFAD/ZUR/SERIE"
 ```

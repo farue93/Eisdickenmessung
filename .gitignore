@@ -1,6 +1,7 @@
 # Ausgaben (werden je Serie erzeugt)
 serie_*/
 output/
+ergebnis*.html
 **/frames/
 *.npz
 *.png

@@ -23,7 +23,13 @@ import cv2
 HERE        = os.path.dirname(os.path.abspath(__file__))
 # Vorverarbeitungs-Output liegt im Schwesterordner "pre processing/Bild 0/output":
 GERUEST_DIR = os.path.normpath(os.path.join(HERE, "..", "pre processing", "Bild 0", "output"))
-SERIE_DIR   = r"G:/Meine Ablage/Uni/VCXU.2-241M_700011810054_260402-174444"  # lokales Beispiel (per CLI überschreiben)
+def _erste_serie(here):
+    _inp = os.path.normpath(os.path.join(here, "..", "input"))          # Serien-Ordner (../input)
+    for d in sorted(glob.glob(os.path.join(_inp, "*"))):
+        if os.path.isdir(d) and glob.glob(os.path.join(d, "*.tif")):
+            return d                                                     # erste Serie mit *.tif
+    return _inp
+SERIE_DIR   = _erste_serie(HERE)   # erste Bilderserie in ../input (dorthin die Serien ablegen)
 STEM        = "2026-04-02_17-51-15-328_image0000000"      # Frame 0 (Default: erstes *.tif der Serie)
 OUT_DIR     = "serie_260402-174444"                       # Ausgabeordner (Bilder + Viewer)
 FRAMES_DIR  = os.path.join(OUT_DIR, "frames")
