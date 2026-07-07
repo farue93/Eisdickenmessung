@@ -1,0 +1,29 @@
+# Ausgaben (werden je Serie erzeugt)
+serie_*/
+output/
+**/frames/
+*.npz
+*.png
+*.jpg
+*.mp4
+
+# Rohdaten / Bilderserien
+*.tif
+*.tiff
+raw/
+
+# Modelle / Gewichte
+*.caffemodel
+*.pt
+*.pth
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# System
+.DS_Store
+Thumbs.db
+desktop.ini
