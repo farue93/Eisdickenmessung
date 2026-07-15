@@ -21,8 +21,8 @@ import cv2
 
 # ---- Pfade (CLI-überschreibbar; Defaults relativ zum Repo -> push-tauglich) ----
 HERE        = os.path.dirname(os.path.abspath(__file__))
-# Vorverarbeitungs-Output liegt im Schwesterordner "pre processing/Bild 0/output":
-GERUEST_DIR = os.path.normpath(os.path.join(HERE, "..", "pre processing", "Bild 0", "output"))
+# Vorverarbeitungs-Output liegt im Schwesterordner "pre processing/output":
+GERUEST_DIR = os.path.normpath(os.path.join(HERE, "..", "pre processing", "output"))
 def _erste_serie(here):
     _inp = os.path.normpath(os.path.join(here, "..", "input"))          # Serien-Ordner (../input)
     for d in sorted(glob.glob(os.path.join(_inp, "*"))):

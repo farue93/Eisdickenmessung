@@ -15,7 +15,7 @@ import os, sys, glob, subprocess
 
 ROOT    = os.path.dirname(os.path.abspath(__file__))
 INPUT   = os.path.join(ROOT, "input")
-PRE     = os.path.join(ROOT, "pre processing", "Bild 0")
+PRE     = os.path.join(ROOT, "pre processing")
 GERUEST = os.path.join(PRE, "output")
 FD      = os.path.join(ROOT, "frame differencing")
 CANNY   = os.path.join(ROOT, "canny ice detection")

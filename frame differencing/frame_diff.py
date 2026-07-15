@@ -2,7 +2,7 @@
 """
 frame_diff.py - Eisdicke ueber Bogenlaenge per Frame Differencing.
 
-Prinzip (fixes Setup, Bild 0 = eisfreies erstes Frame der Serie):
+Prinzip (fixes Setup, Frame 0 = eisfreies erstes Frame der Serie):
   1. D = I_frame - I_0  (vorzeichenbehaftet) -> loescht alles Statische,
      uebrig bleibt nur die neue, nach aussen verschobene Eis-Laserlinie.
   2. Variante 1: entlang jeder Bild-0-Normale (aussen) das D-Profil abtasten,
@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 # ---- Pfade (CLI-überschreibbar; Defaults relativ zum Repo -> push-tauglich) ----
 HERE = os.path.dirname(os.path.abspath(__file__))
-GERUEST_DIR = os.path.normpath(os.path.join(HERE, "..", "pre processing", "Bild 0", "output"))
+GERUEST_DIR = os.path.normpath(os.path.join(HERE, "..", "pre processing", "output"))
 def _erste_serie(here):
     _inp = os.path.normpath(os.path.join(here, "..", "input"))          # Serien-Ordner (../input)
     for d in sorted(glob.glob(os.path.join(_inp, "*"))):

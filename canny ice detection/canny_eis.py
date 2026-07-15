@@ -23,12 +23,12 @@ import cv2
 # Pfade relativ zum Repo (Schwesterordner) -> push-tauglich
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "frame differencing"))
-sys.path.insert(0, os.path.join(HERE, "..", "pre processing", "Bild 0"))
+sys.path.insert(0, os.path.join(HERE, "..", "pre processing"))
 import serie_eis as se
 import laser_pipeline as lp
 
 # ---- Pfade (CLI-überschreibbar; Defaults relativ zum Repo) ----
-GERUEST_DIR = os.path.normpath(os.path.join(HERE, "..", "pre processing", "Bild 0", "output"))
+GERUEST_DIR = os.path.normpath(os.path.join(HERE, "..", "pre processing", "output"))
 def _erste_serie(here):
     _inp = os.path.normpath(os.path.join(here, "..", "input"))          # Serien-Ordner (../input)
     for d in sorted(glob.glob(os.path.join(_inp, "*"))):

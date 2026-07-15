@@ -8,7 +8,7 @@ Findet die Repo-Wurzel automatisch (der Ordner, der 'frame differencing' UND
 Serie, die Frame-0-Geometrie und die Ergebnis-JSONs ab.
 
 Voraussetzung: die Pipeline (run.py -> laser_pipeline, serie_eis, canny) wurde
-einmal ausgefuehrt, damit Geometrie (pre processing/Bild 0/output) und die
+einmal ausgefuehrt, damit Geometrie (pre processing/output) und die
 gecroppten Frames (frame differencing/serie_*/frames) existieren.
 """
 import os, sys, glob, json
@@ -31,7 +31,7 @@ def _repo_root(start):
 REPO      = _repo_root(os.path.dirname(os.path.abspath(__file__)))
 FRAMEDIFF = os.path.join(REPO, "frame differencing")
 CANNY     = os.path.join(REPO, "canny ice detection")
-GERUEST   = os.path.join(REPO, "pre processing", "Bild 0", "output")
+GERUEST   = os.path.join(REPO, "pre processing", "output")
 INPUT     = os.path.join(REPO, "input")
 if FRAMEDIFF not in sys.path:
     sys.path.insert(0, FRAMEDIFF)                        # damit 'import serie_eis' geht

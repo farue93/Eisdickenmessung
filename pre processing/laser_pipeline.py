@@ -36,7 +36,7 @@ from scipy.spatial import cKDTree                    # schnelle Nächste-Nachbar
 from skimage.morphology import skeletonize          # 1px-Skelett der Pixelmenge
 
 # ── Pfade ─────────────────────────────────────────────────────────────────
-HERE   = Path(__file__).parent       # Verzeichnis dieser Datei (= pre processing/Bild 0)
+HERE   = Path(__file__).parent       # Verzeichnis dieser Datei (= pre processing)
 RAW    = HERE / "raw"                 # Eingabe: Roh-TIFs
 OUTPUT = HERE / "output"             # Ausgabe: npz + Visualisierungen
 OUTPUT.mkdir(parents=True, exist_ok=True)   # Ausgabeordner anlegen, falls nicht vorhanden

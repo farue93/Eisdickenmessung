@@ -25,7 +25,7 @@ Differencing -> Canny) und schreibt `ergebnis.html` mit Links auf alle Viewer.
 ```
 run.py                  Alle Serien in input/ auswerten
 input/                  ← hier die Bilderserien ablegen (ein Unterordner je Serie)
-pre processing/Bild 0/
+pre processing/
     laser_pipeline.py   Laserlinie im Referenzframe (Frame 0) detektieren + fitten
     crop_roi.py         gerundetes ROI-Band um die Laserlinie
 frame differencing/
@@ -45,8 +45,8 @@ muss der **eisfreie** Referenzframe sein.
 
 ```bash
 # 1) Vorverarbeitung auf Frame 0 (einmal je Serie):
-python "pre processing/Bild 0/laser_pipeline.py" "PFAD/frame0.tif" --out "pre processing/Bild 0/output"
-python "pre processing/Bild 0/crop_roi.py" --out "pre processing/Bild 0/output" --raw "PFAD/ZUR/SERIE" --stem <frame0-stamm>
+python "pre processing/laser_pipeline.py" "PFAD/frame0.tif" --out "pre processing/output"
+python "pre processing/crop_roi.py" --out "pre processing/output" --raw "PFAD/ZUR/SERIE" --stem <frame0-stamm>
 
 # 2) Messmethoden (Serienordner als Argument, oder ohne = erste Serie in input/):
 python "frame differencing/serie_eis.py"  "PFAD/ZUR/SERIE"
