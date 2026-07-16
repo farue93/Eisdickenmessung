@@ -1,0 +1,109 @@
+% ============================================================
+% doku_ki_kantenerkennung.tex
+% Wissenschaftliche Dokumentation -- Methode D: KI-Kantenerkennung (HED)
+% Bildbasierte Eisdickenmessung -- Fabian Rüth, TU Braunschweig
+% Code: hed_eis.py
+% ============================================================
+
+\section{Methode D -- KI-Kantenerkennung (HED)}
+\label{sec:hed}
+
+Die vierte Methode ersetzt den handentworfenen Canny-Operator
+(Kap.~\ref{sec:canny}) durch ein \textbf{gelerntes} Kantenmodell:
+\emph{Holistically-Nested Edge Detection} (HED) \citep{xie2015hed}. HED ist ein
+tiefes Faltungsnetz, das Kanten nicht aus einem festen Gradientenkriterium,
+sondern aus antrainierten, mehrskaligen Merkmalen vorhersagt. Wie bei Methode~B
+dient der Laser nur zum Croppen; Null- und Messlinie sind HED-Kanten.
+Code: \texttt{hed\_eis.py}.
+
+% ────────────────────────────────────────────────────────────
+\subsection{Das HED-Netz}
+\label{sec:hed_netz}
+
+HED \citep{xie2015hed} basiert auf einem VGG-artigen Encoder mit fünf Stufen. An
+jeder Stufe hängt ein \emph{Side-Output}, der eine Kantenkarte in der jeweiligen
+Auflösung erzeugt; alle Side-Outputs werden auf die Bildgröße hochskaliert und zu
+einer finalen Wahrscheinlichkeitskarte fusioniert. Durch die \emph{tiefe
+Überwachung} (jede Stufe wird gegen die Kanten-Ground-Truth trainiert) erfasst
+das Netz sowohl feine als auch grobe Kanten. Das Modell liefert pro Pixel eine
+\textbf{Kantenwahrscheinlichkeit} $P_e \in [0,1]$, keine binäre Schwellentscheidung
+wie Canny.
+
+\paragraph{Einbindung.}
+Das vortrainierte Caffe-Modell \citep{jia2014caffe} wird über das DNN-Modul von
+OpenCV \citep{bradski2000} geladen (\texttt{readNetFromCaffe} mit
+\texttt{deploy.prototxt} und \texttt{hed.caffemodel}). Zwei technische Details:
+\begin{itemize}
+  \item \textbf{Eigene \texttt{CropLayer}}: Die im Caffe-Netz verwendete
+        \emph{Crop}-Schicht (zentriertes Zuschneiden der Side-Outputs auf die
+        Zielgröße) ist in OpenCV nicht enthalten und wird als kleine
+        Python-Schicht nachimplementiert und registriert.
+  \item \textbf{Vorverarbeitung}: \texttt{blobFromImage} skaliert das Bild auf ein
+        Vielfaches von~$16$ und subtrahiert die VGG-Trainingsmittelwerte
+        $(104{,}0;\,116{,}7;\,122{,}7)$ pro Kanal -- notwendig, damit die
+        Eingabestatistik der des Trainings entspricht.
+\end{itemize}
+
+% ────────────────────────────────────────────────────────────
+\subsection{Kantenkarte und Referenzlinie}
+\label{sec:hed_karte}
+
+Die HED-Ausgabe (Funktion \texttt{hed\_karte}) wird auf die Crop-Größe skaliert,
+mit $255$ multipliziert und bei $T_\mathrm{HED} = 40$ geschwellt, auf das ROI-Band
+beschränkt und anschließend \textbf{skelettiert} \citep{zhang1984}, da HED-Kanten
+mehrere Pixel breit sind:
+\begin{equation}
+  E = \operatorname{skeleton}\bigl( (255\,P_e > T_\mathrm{HED}) \wedge \text{Band}\bigr).
+\end{equation}
+Aus $E$ von Frame~0 wird -- mit derselben Verkettungs-Infrastruktur wie in
+Kap.~\ref{sec:canny_referenz} (\texttt{skelett\_teilstuecke},
+\texttt{fit\_teilstueck}, \texttt{verbinde}, \texttt{bogenlaenge\_und\_normalen})
+-- die geordnete \textbf{Nulllinie} $d_0(s)$ mit Bogenlänge und Außennormalen
+gebildet. HED arbeitet direkt auf den bereits gecroppten PNGs, ein erneutes Laden
+der großen TIFF-Dateien entfällt.
+
+% ────────────────────────────────────────────────────────────
+\subsection{Detektion mit Sprungbegrenzung}
+\label{sec:hed_detektion}
+
+Wie bei Canny (Kap.~\ref{sec:canny_tracking}) wird je Station die nächste
+Kantenkreuzung zur Vorframe-Lage gewählt. Zusätzlich begrenzt eine
+\textbf{Sprungschwelle} die zulässige Änderung pro Frame:
+\begin{equation}
+  d_N(s_i) =
+  \begin{cases}
+    k^\ast, & |k^\ast - d^{\text{prev}}(s_i)| \le \Delta_{\max}=5\,\text{px},\\
+    \text{NaN}, & \text{sonst},
+  \end{cases}
+  \qquad
+  k^\ast = \arg\min_{k_g} |k_g - d^{\text{prev}}(s_i)| .
+\end{equation}
+Ohne diese Begrenzung springt die Detektion in den ersten Frames auf die
+$\approx 50\,\text{px}$ weiter außen liegende Kante des hell beleuchteten Bandes
+und meldet Scheineis; $\Delta_{\max}$ erzwingt den physikalisch plausiblen,
+langsamen Eiszuwachs. Eisdicke, Median-Glättung und Kalibrierung folgen wie in
+Gl.~\eqref{eq:dicke}.
+
+% ────────────────────────────────────────────────────────────
+\subsection{Ergebnisse, Laufzeit und Grenzen}
+\label{sec:hed_ergebnisse}
+
+HED liefert den Endwert $\approx 5{,}5\,\text{px} \approx 0{,}40\,\text{mm}$ und
+erzeugt die visuell sauberste, durchgehendste Kante auf der Laser-/Eislinie -- die
+Stärke des gelernten Modells gegenüber Canny.
+
+\paragraph{Laufzeit.}
+Der Vorwärtsdurchlauf kostet auf der CPU $\approx 3{,}7\,\text{s}$ pro
+Vollbild-Frame ($\approx 0{,}3$\,FPS). HED ist damit zwar die genaueste
+Kantenmethode, für eine \textbf{Live-Messung} aber ungeeignet; hier sind
+Methode~A/B ($\approx 11$\,FPS) oder das U-Net (Kap.~\ref{sec:semseg},
+$\approx 75$\,FPS) vorzuziehen. Auf einer GPU wäre HED um etwa eine
+Größenordnung schneller.
+
+\paragraph{Einordnung.}
+Mit HED liegen vier methodisch unabhängige Verfahren vor -- klassischer
+Intensitätsrücken (A), klassische Kante (B), gelernte Segmentierung (C) und
+gelernte Kante (D) --, deren Wachstumskurven auf $\pm 0{,}5\,\text{px}
+\approx \pm 0{,}04\,\text{mm}$ übereinstimmen. Der Ensemble-Median beträgt
+$\approx 6{,}2\,\text{px} \approx 0{,}45\,\text{mm}$; die Übereinstimmung
+unabhängiger Prinzipien ist die zentrale Validierung der Messkette.

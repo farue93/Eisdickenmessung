@@ -1,0 +1,21 @@
+# laser_v2 - nur Code pushen; Daten/Gewichte/Ergebnisse bleiben lokal
+__pycache__/
+*.pt                 # mobile_sam.pt (40MB), unet.pt
+
+# generierte Label-/Ergebnisdaten
+/frames/
+/masks/
+/split.json
+/vergleich/
+/un/
+
+# SAM-Ausgaben
+sam/data.json
+sam/auto_*.png
+sam/engcrop_*.png
+sam/tile_*.png
+
+# U-Net-Ausgaben
+unet/data.json
+
+# Hinweis: eigene Handlabels bewusst mit-committen? ->  git add -f masks/

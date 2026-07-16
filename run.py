@@ -15,10 +15,11 @@ import os, sys, glob, subprocess
 
 ROOT    = os.path.dirname(os.path.abspath(__file__))
 INPUT   = os.path.join(ROOT, "input")
-PRE     = os.path.join(ROOT, "pre processing")
+PRE     = os.path.join(ROOT, "preprocessing")
 GERUEST = os.path.join(PRE, "output")
-FD      = os.path.join(ROOT, "frame differencing")
-CANNY   = os.path.join(ROOT, "canny ice detection")
+FD      = os.path.join(ROOT, "methoden", "frame_differencing")
+CANNY   = os.path.join(ROOT, "methoden", "canny")
+HED     = os.path.join(ROOT, "methoden", "hed")
 PY      = sys.executable
 
 
@@ -48,10 +49,13 @@ def eine_serie(serie):
 
     run("Frame Differencing", ["serie_eis.py", serie], FD)
     run("Canny",              ["canny_eis.py", serie], CANNY)
+    run("HED (KI-Kanten)",    ["hed_eis.py", "--frames", os.path.join(FD, "serie_"+suffix, "frames"),
+                               "--geruest", GERUEST, "--stem", stem, "--out", "serie_"+suffix], HED)
 
     return os.path.basename(serie), [
-        ("Frame Differencing", os.path.join("frame differencing", f"serie_{suffix}", "viewer.html")),
-        ("Canny",              os.path.join("canny ice detection", f"serie_{suffix}", "viewer.html")),
+        ("Frame Differencing", os.path.join("methoden", "frame_differencing", f"serie_{suffix}", "viewer.html")),
+        ("Canny",              os.path.join("methoden", "canny", f"serie_{suffix}", "viewer.html")),
+        ("HED",                os.path.join("methoden", "hed", f"serie_{suffix}", "viewer.html")),
     ]
 
 
