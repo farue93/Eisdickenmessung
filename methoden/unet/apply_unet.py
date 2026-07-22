@@ -10,7 +10,7 @@ import cv2
 import torch
 
 BASE = os.path.dirname(os.path.abspath(__file__))                  # laser_v2/unet
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(BASE)), "gemeinsam"))                          # laser_v2 (fuer pfade)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(BASE)), "gemeinsam"))
 import pfade                                                        # relative Repo-Aufloesung
 import serie_eis as se
 from modell import UNet

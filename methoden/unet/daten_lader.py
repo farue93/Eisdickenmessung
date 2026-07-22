@@ -10,9 +10,9 @@ import cv2
 import torch
 
 BASE = os.path.dirname(os.path.abspath(__file__))    # laser_v2/unet
-LAB  = os.path.join(os.path.dirname(os.path.dirname(BASE)), "gemeinsam")                          # laser_v2  (frames/ masks/ split.json)
+LAB  = os.path.join(os.path.dirname(os.path.dirname(BASE)), "gemeinsam")
 # Trainingsziel: die Mittellinien (masks_train/, von mittellinie.py) - sonst Handlabels
-MASKDIR = "masks_train" if os.path.isdir(os.path.join(LAB, "masks_train")) else "masks"
+MASKDIR = "masks"   # neue, saubere Handlabels direkt
 
 
 def lade_paare(gruppe):

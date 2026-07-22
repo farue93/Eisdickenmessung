@@ -16,6 +16,7 @@ Radius/Helligkeit auch per Trackbar (oder [ ] und , .).
 """
 import os, glob, cv2
 import numpy as np
+from scipy import interpolate as si
 
 BASE   = os.path.dirname(os.path.abspath(__file__))
 FRAMES = os.path.join(BASE, "frames")           # die 5 ausgewaehlten Frames
@@ -29,7 +30,7 @@ assert files, f"Keine Frames in {FRAMES} - erst setup_labels.py laufen lassen."
 # Ansichts-/Werkzeug-Zustand in EINEM dict (bequem im Callback aenderbar)
 S = {"i": 0, "img": None, "mask": None, "H": 0, "W": 0,
      "zoom": 1.0, "ox": 0.0, "oy": 0.0, "tool": None, "last": None, "pan": None,
-     "mouse": None, "disp": None}                       # Cursor-Pos + gepufferter Anzeige-Frame
+     "mouse": None, "disp": None, "punkte": []}         # + Stuetzpunkte fuer den Punkt-Modus
 
 
 # ---------------------------------------------------- laden / speichern
@@ -43,6 +44,7 @@ def lade(i):
     mp = mask_path(S["i"])
     m = cv2.imread(mp, cv2.IMREAD_GRAYSCALE) if os.path.exists(mp) else None
     S["mask"] = m if m is not None else np.zeros((S["H"], S["W"]), np.uint8)
+    S["punkte"] = []                                     # Punkt-Modus je Frame frisch
 
 
 # ---------------------------------------------------- Trackbars lesen
@@ -53,6 +55,49 @@ def radius():   return max(1, tb("Radius"))
 def schwelle(): return tb("Helligkeit")
 def gate_an():  return tb("Gate 0/1") == 1
 def hint_an():  return tb("Vorschau 0/1") == 1
+def punktmodus(): return tb("Punkt-Modus") == 1
+def bandbreite(): return max(1, tb("Bandbreite"))
+
+
+# ---------------------------------------------------- Punkt-Modus: Spline durch Stuetzpunkte
+def spline_kurve(punkte):
+    """Glatte Kurve (dicht abgetastet) durch die Stuetzpunkte; Fallback = Polygonzug."""
+    p = np.array(punkte, float)
+    if len(p) < 2:
+        return p
+    k = min(3, len(p) - 1)                               # Grad: 1 (Gerade) .. 3 (kubisch)
+    try:
+        tck, _ = si.splprep([p[:, 0], p[:, 1]], s=0, k=k)   # interpolierender B-Spline
+        uu = np.linspace(0, 1, max(60, len(p) * 25))
+        xx, yy = si.splev(uu, tck)
+        return np.column_stack([xx, yy])
+    except Exception:
+        return p                                         # Notfall: gerade Verbindungen
+
+
+def spline_band(punkte, breite, H, W):
+    """Spline auf 'breite' px verdickt = Trainingsmaske (0/255)."""
+    m = np.zeros((H, W), np.uint8)
+    d = spline_kurve(punkte)
+    if len(d) >= 2:
+        cv2.polylines(m, [d.round().astype(np.int32)], False, 255, breite, cv2.LINE_AA)
+    elif len(d) == 1:
+        cv2.circle(m, tuple(d[0].round().astype(int)), max(1, breite // 2), 255, -1)
+    return m
+
+
+def rebake():
+    """Aus den aktuellen Stuetzpunkten die Bandmaske neu erzeugen."""
+    S["mask"] = spline_band(S["punkte"], bandbreite(), S["H"], S["W"])
+
+
+def entferne_punkt(p):
+    """Naechsten Stuetzpunkt (nahe p) loeschen, sonst den letzten."""
+    if not S["punkte"]:
+        return
+    pts = np.array(S["punkte"], float)
+    j = int(np.argmin(np.hypot(pts[:, 0] - p[0], pts[:, 1] - p[1])))
+    S["punkte"].pop(j if np.hypot(*(pts[j] - p)) < 25 else -1)
 
 
 # ---------------------------------------------------- malen
@@ -107,7 +152,11 @@ def anzeigen():
            f"Maske {n}px  Zoom {S['zoom']:.1f}x")
     cv2.rectangle(disp, (0, 0), (winw, 22), (0, 0, 0), -1)
     cv2.putText(disp, hud, (8, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 1, cv2.LINE_AA)
-    if S["mouse"] is not None:                          # Pinsel-Radius-Vorschau am Cursor
+    if punktmodus():                                    # Stuetzpunkte als gelbe Marker
+        for sx, sy in S["punkte"]:
+            wx = int((sx - S["ox"]) * S["zoom"]); wy = int((sy - S["oy"]) * S["zoom"])
+            cv2.circle(disp, (wx, wy), 4, (0, 255, 255), -1); cv2.circle(disp, (wx, wy), 4, (0, 0, 0), 1)
+    elif S["mouse"] is not None:                         # Pinsel-Radius-Vorschau am Cursor
         mx, my = S["mouse"]; rpx = max(1, int(round(radius() * S["zoom"])))
         farbe = (0, 0, 255) if S["tool"] == "erase" else (0, 255, 255)   # Radierer rot / Pinsel gelb
         cv2.circle(disp, (mx, my), rpx, farbe, 1, cv2.LINE_AA)
@@ -133,10 +182,16 @@ def maus(event, mx, my, flags, _):
     S["mouse"] = (mx, my)                                # Cursor immer merken (fuer Radius-Vorschau)
     if event == cv2.EVENT_MOUSEWHEEL:
         zoom_auf(mx, my, 1.25 if flags > 0 else 0.8); render(); return
-    if event == cv2.EVENT_LBUTTONDOWN:
-        S["tool"] = "paint"; S["last"] = win_zu_quelle(mx, my); stempel(S["last"], S["last"], "paint"); render(); return
-    if event == cv2.EVENT_RBUTTONDOWN:
-        S["tool"] = "erase"; S["last"] = win_zu_quelle(mx, my); stempel(S["last"], S["last"], "erase"); render(); return
+    if punktmodus():                                     # PUNKT-MODUS: klicken = Stuetzpunkt
+        if event == cv2.EVENT_LBUTTONDOWN:
+            S["punkte"].append(win_zu_quelle(mx, my)); rebake(); render(); return
+        if event == cv2.EVENT_RBUTTONDOWN:
+            entferne_punkt(win_zu_quelle(mx, my)); rebake(); render(); return
+    else:                                                # PINSEL-MODUS
+        if event == cv2.EVENT_LBUTTONDOWN:
+            S["tool"] = "paint"; S["last"] = win_zu_quelle(mx, my); stempel(S["last"], S["last"], "paint"); render(); return
+        if event == cv2.EVENT_RBUTTONDOWN:
+            S["tool"] = "erase"; S["last"] = win_zu_quelle(mx, my); stempel(S["last"], S["last"], "erase"); render(); return
     if event == cv2.EVENT_MBUTTONDOWN:
         S["pan"] = (mx, my); return
     if event == cv2.EVENT_MOUSEMOVE:
@@ -160,6 +215,8 @@ def main():
     cv2.createTrackbar("Helligkeit", WIN, 150, 255, lambda v: render())    # blaue Vorschau neu
     cv2.createTrackbar("Gate 0/1", WIN, 1, 1, lambda v: render())
     cv2.createTrackbar("Vorschau 0/1", WIN, 1, 1, lambda v: render())
+    cv2.createTrackbar("Punkt-Modus", WIN, 0, 1, lambda v: render())     # 0=Pinsel, 1=Punkte
+    cv2.createTrackbar("Bandbreite", WIN, 3, 8, lambda v: (rebake() if punktmodus() and S["punkte"] else None, render()))
     cv2.setMouseCallback(WIN, maus)
     lade(0); einpassen(); render()
     print("Bereit. L=Pinsel R=Radierer  Rad=Zoom  Mitte=Verschieben  n/p=Frame  s=save  q=Ende")
@@ -170,7 +227,10 @@ def main():
         elif k == ord('n'): speichern(); lade(S["i"] + 1); render()
         elif k == ord('p'): speichern(); lade(S["i"] - 1); render()
         elif k == ord('s'): speichern(); print("gespeichert:", os.path.basename(mask_path(S["i"])))
-        elif k == ord('c'): S["mask"][:] = 0; render()
+        elif k == ord('c'): S["mask"][:] = 0; S["punkte"] = []; render()
+        elif k == ord('m'): cv2.setTrackbarPos("Punkt-Modus", WIN, 0 if punktmodus() else 1); render()
+        elif k == ord('z'):                              # letzten Stuetzpunkt zurueck
+            if S["punkte"]: S["punkte"].pop(); rebake(); render()
         elif k == ord('1'): S["zoom"] = 1.0; render()
         elif k == ord('f'): einpassen(); render()
         elif k == ord('g'): cv2.setTrackbarPos("Gate 0/1", WIN, 0 if gate_an() else 1); render()

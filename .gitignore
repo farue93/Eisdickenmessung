@@ -27,3 +27,9 @@ venv/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# generierte Viewer/Ergebnisse (je nach lokaler input/-Serie)
+data.json
+viewer.html
+wachstumsrate/
+vergleich/
