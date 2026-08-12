@@ -33,3 +33,9 @@ data.json
 viewer.html
 wachstumsrate/
 vergleich/
+
+# Ausnahme fuer den Versuchsordner: er soll nach dem Klonen SOFORT lauffaehig
+# sein (Messtag, fremder Rechner, keine Zeit fuer Nachinstallation). Deshalb
+# liegen dort die Gewichte bewusst mit im Repo - die Regel oben gilt weiter.
+!Versuch/modelle/
+!Versuch/modelle/*.pt

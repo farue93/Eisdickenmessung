@@ -1,0 +1,12 @@
+# Binaerdateien NIEMALS in den Zeilenenden anfassen. Git haelt die PDFs sonst
+# fuer Text (ihr Inhalt ist grossteils ASCII) und schreibt LF nach CRLF um -
+# das verschiebt die Byte-Offsets der xref-Tabelle und macht die Druckvorlage
+# unbrauchbar. Faellt erst auf, wenn jemand nach dem Klonen drucken will.
+*.pdf   binary
+*.pt    binary
+*.pth   binary
+*.npz   binary
+*.png   binary
+*.jpg   binary
+*.tif   binary
+*.tiff  binary
