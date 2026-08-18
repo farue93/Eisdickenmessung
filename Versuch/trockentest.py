@@ -31,8 +31,9 @@ def module():
             fehlt.append(name)
 
     print("\nEigene Module:")
-    for name in ("gemeinsam.konfig", "gemeinsam.ordnerwache",
-                 "gemeinsam.massstab", "gemeinsam.geraet", "gemeinsam.gui"):
+    for name in ("gemeinsam.konfig", "gemeinsam.ordnerwache", "gemeinsam.massstab",
+                 "gemeinsam.kalibrierung", "gemeinsam.kalibrier_tab",
+                 "gemeinsam.geraet", "gemeinsam.gui"):
         try:
             __import__(name); print(f"  {name:22s} OK")
         except Exception as e:
@@ -66,42 +67,65 @@ def module():
         if not da:
             fehlt.append(f"modelle/{datei}")
 
-    print("\nWerkzeuge fuer den Messtag:")
-    for beschreibung, datei in (("Messbereich setzen", "roi_werkzeug.py"),
-                                ("Kalibrierung", "kalibrierung_schachbrett.py")):
+    print("\nProgramme fuer den Messtag:")
+    for beschreibung, datei in (("Lasermessung", "messung_laser.py"),
+                                ("Flaechenmessung", "messung_flaeche.py"),
+                                ("Messbereich setzen", "roi_werkzeug.py"),
+                                ("Druckvorlage", "schachbrett_drucken.py")):
         da = os.path.exists(os.path.join(BASE, datei))
         print(f"  {beschreibung:18s} {'gefunden' if da else 'FEHLT'}")
         if not da:
             fehlt.append(datei)
 
+    print("\nKalibrierkette (Selbsttest mit synthetischem Brett):")
+    try:
+        from gemeinsam.kalibrierung import selbsttest
+        ok, zeilen = selbsttest()
+        for z in zeilen:
+            print(f"  {z}")
+        print(f"  -> {'OK' if ok else 'PRUEFEN'}")
+        if not ok:
+            fehlt.append("Kalibrierung (Selbsttest)")
+    except Exception as e:
+        print(f"  FEHLER: {e}")
+        fehlt.append("Kalibrierung (Selbsttest)")
+
     print("\nMessbereich:")
-    if os.path.exists(os.path.join(BASE, "messbereich.npz")):
-        print("  vorhanden - PRUEFEN, ob er zur AKTUELLEN Kameraposition passt.")
+    vorhanden = [f for f in os.listdir(BASE) if f.startswith("messbereich") and f.endswith(".npz")]
+    if vorhanden:
+        print(f"  vorhanden: {', '.join(vorhanden)}")
+        print("  PRUEFEN, ob er zur AKTUELLEN Kameraposition passt.")
         print("  Ein Messbereich aus einem frueheren Aufbau ist wertlos.")
     else:
-        print("  noch nicht gesetzt - am Messtag mit start_roi.bat anlegen")
-        print("  (kein Fehler: das gehoert vor Ort gemacht)")
+        print("  noch nicht gesetzt - am Messtag in der Flaechen-Oberflaeche")
+        print("  ueber 'Messbereich festlegen ...' anlegen (kein Fehler: gehoert vor Ort)")
 
     print("\nErgebnis:", "alles bereit" if not fehlt else f"FEHLT: {fehlt}")
 
 
 def wache():
-    """Prueft, dass halbfertig geschriebene Dateien NICHT ausgeliefert werden."""
-    from gemeinsam.ordnerwache import Ordnerwache
+    """Die drei Eigenschaften, auf die sich am Messtag alles stuetzt:
+    halbfertige Dateien werden nicht ausgeliefert, der Unterordner der Kamera
+    wird gefunden, und im Live-Modus wird das neueste Bild genommen."""
+    from gemeinsam.ordnerwache import Ordnerwache, AUTO
     import numpy as np, cv2
 
-    testordner = os.path.join(BASE, "_trockentest_wache")
-    shutil.rmtree(testordner, ignore_errors=True)
-    os.makedirs(testordner)
-    w = Ordnerwache(testordner, ab_bestand=True)
+    def bild(pfad):
+        cv2.imwrite(pfad, (np.random.rand(80, 120) * 255).astype(np.uint8))
 
-    ziel = os.path.join(testordner, "bild_0001.png")
+    wurzel = os.path.join(BASE, "_trockentest_wache")
+    shutil.rmtree(wurzel, ignore_errors=True)
+    lauf = os.path.join(wurzel, "lauf_01")
+    os.makedirs(lauf)
+    w = Ordnerwache(wurzel, AUTO, ab_bestand=True)
+
+    ziel = os.path.join(lauf, "bild_0001.png")
     with open(ziel, "wb") as f:                     # angefangen, noch nicht fertig
         f.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 5000)
     sofort = w.neue()
     print(f"  waehrend des Schreibens ausgeliefert: {len(sofort)}  (erwartet 0)")
 
-    cv2.imwrite(ziel, (np.random.rand(80, 120) * 255).astype(np.uint8))
+    bild(ziel)
     w.neue()                                        # Groesse merken
     time.sleep(0.05)
     danach = w.neue()
@@ -109,12 +133,30 @@ def wache():
 
     nochmal = w.neue()
     print(f"  erneut ausgeliefert:                 {len(nochmal)}  (erwartet 0)")
-    shutil.rmtree(testordner, ignore_errors=True)
-    print("  Ergebnis:", "OK" if (not sofort and len(danach) == 1 and not nochmal) else "FEHLER")
+
+    ordner_ok = w.aktiv_kurz == "lauf_01"
+    print(f"  ueberwachter Unterordner:            {w.aktiv_kurz}  (erwartet lauf_01)")
+
+    for i in range(2, 7):
+        bild(os.path.join(lauf, f"bild_{i:04d}.png"))
+    w.neue()                                        # Groessen merken
+    neu = w.neueste()
+    live_ok = (neu is not None and os.path.basename(neu) == "bild_0006.png"
+               and w.uebersprungen == 4)
+    print(f"  Live-Modus liefert:                  "
+          f"{os.path.basename(neu) if neu else '-'}, "
+          f"{w.uebersprungen} uebersprungen  (erwartet bild_0006.png / 4)")
+
+    shutil.rmtree(wurzel, ignore_errors=True)
+    alles = (not sofort and len(danach) == 1 and not nochmal and ordner_ok and live_ok)
+    print("  Ergebnis:", "OK" if alles else "FEHLER")
 
 
-def speisen(ziel, anzahl=40, pause=1.0):
-    """Kamera-Ersatz: kopiert vorhandene Frames einzeln in den Zielordner."""
+def speisen(wurzel, anzahl=40, pause=1.0):
+    """Kamera-Ersatz: kopiert vorhandene Frames einzeln in einen UNTERORDNER
+    des Zielordners - genau so, wie die Kamerasoftware je Lauf einen anlegt.
+    In der Oberflaeche wird WURZEL gewaehlt, nicht der Unterordner."""
+    ziel = os.path.join(wurzel, time.strftime("lauf_%H%M%S"))
     quelle = os.environ.get("TESTFRAMES") or os.path.join(
         os.path.dirname(BASE), "eisflaeche", "frames", "left")
     dateien = sorted(glob.glob(os.path.join(quelle, "*.tif*")))
@@ -130,7 +172,8 @@ def speisen(ziel, anzahl=40, pause=1.0):
     dateien = dateien[:anzahl]
     os.makedirs(ziel, exist_ok=True)
     print(f"Speise {len(dateien)} Frames nach {ziel}, alle {pause}s")
-    print("Jetzt in der Oberflaeche diesen Ordner waehlen und Start druecken.")
+    print(f"In der Oberflaeche als Aufnahmeordner waehlen:  {wurzel}")
+    print("(der Unterordner wird automatisch gefunden), dann 'Kamera verbinden'.")
     for i, q in enumerate(dateien, 1):
         # erst unter Hilfsnamen kopieren, dann umbenennen: so taucht die Datei
         # nur vollstaendig auf - wie es eine gut gebaute Kamerasoftware macht

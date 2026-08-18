@@ -6,5 +6,5 @@ set "PY=py"
 where /q py && goto start
 set "PY=python"
 :start
-"%PY%" messung_laser.py
+"%PY%" trockentest.py
 if errorlevel 1 pause

@@ -42,7 +42,7 @@ ANZEIGE_W, ANZEIGE_H = 1500, 820
 S = {"bild": None, "H": 0, "W": 0, "zoom": 1.0, "ox": 0.0, "oy": 0.0,
      "rechteck": None, "zieht": False, "start": None,
      "aus": None, "pinsel": False, "malt": False, "radius": 40,
-     "verlauf": [], "maus": None, "quelle": ""}
+     "verlauf": [], "maus": None, "quelle": "", "ziel": None}
 
 
 def bild_laden(pfad):
@@ -182,11 +182,15 @@ def speichern():
     if m is None:
         print("  kein Rechteck gesetzt - nichts gespeichert"); return
     x0, y0, x1, y1 = S["rechteck"]
-    ziel = os.path.join(BASE, "messbereich.npz")
+    # Zielpfad kommt von der aufrufenden Oberflaeche: mit zwei Flaechenkameras
+    # braucht jede ihren eigenen Messbereich, ein fester Name wuerde den der
+    # anderen Kamera ueberschreiben.
+    ziel = S["ziel"] or os.path.join(BASE, "messbereich.npz")
+    os.makedirs(os.path.dirname(ziel) or ".", exist_ok=True)
     # gleiches Format wie die bisherige Panelmaske: volle Bildgroesse + bbox
     np.savez(ziel, maske=m, bbox=np.array([x0, y0, x1, y1]),
              flaeche_px=int(m.sum()), quelle=os.path.basename(S["quelle"]))
-    vor = os.path.join(BASE, "messbereich_kontrolle.png")
+    vor = os.path.splitext(ziel)[0] + "_kontrolle.png"
     vis = cv2.cvtColor(np.clip(S["bild"].astype(np.float32) * 1.3, 0, 255).astype(np.uint8),
                        cv2.COLOR_GRAY2BGR)
     vis[m == 0] = (vis[m == 0] * 0.3).astype(np.uint8)
@@ -200,6 +204,7 @@ def speichern():
 
 def main():
     pfad = sys.argv[1] if len(sys.argv) > 1 else None
+    S["ziel"] = sys.argv[2] if len(sys.argv) > 2 else None
     if not pfad:
         import tkinter as tk
         from tkinter import filedialog

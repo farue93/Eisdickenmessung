@@ -19,19 +19,20 @@ WICHTIG BEIM DRUCKEN:
   - Mattes Papier oder matte Klebefolie, kein Glanz.
   - Nach dem Druck die Kontrollstrecke auf dem Blatt nachmessen.
 
+Erzeugt reine Musterboegen fuer A4 und A3 - nur das Schachbrett, sonst nichts
+auf dem Blatt. Die Messoberflaeche liest Eckenzahl und Feldgroesse aus
+denselben Funktionen (blatt_masse), Vorlage und Eingabefeld koennen also nicht
+auseinanderlaufen.
+
 Aufruf:
-  python schachbrett_drucken.py                 Standard: 10 mm, 5x8 innere Ecken
+  python schachbrett_drucken.py                 10-mm-Felder, A4 und A3
   python schachbrett_drucken.py 5               5-mm-Felder
-  python schachbrett_drucken.py 10 7 10         10 mm, 7x10 innere Ecken
 """
 import os, sys
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
 FELD_MM = 10.0        # Kantenlaenge eines Feldes
-ECKEN = (5, 8)        # INNERE Ecken (Spalten, Zeilen) -> Felder = +1 je Richtung
-KOPIEN = 2            # Bretter je Blatt (das zweite als Ersatz)
-MESSSTRECKE_MM = 100.0
 
 PT = 72.0 / 25.4      # Punkte je Millimeter
 A4 = (210.0, 297.0)   # mm
@@ -103,70 +104,32 @@ def pdf_schreiben(pfad, seite, groesse_mm=A4):
     open(pfad, "wb").write(bytes(aus))
 
 
-def bauen(feld_mm=FELD_MM, ecken=ECKEN, kopien=KOPIEN):
-    spalten_f, zeilen_f = ecken[0] + 1, ecken[1] + 1
-    brett_b, brett_h = spalten_f * feld_mm, zeilen_f * feld_mm
-    s = Seite()
-    oben = A4[1]
-
-    s.text(20, oben - 20, "Kalibriermuster Eiswindkanal", 13, "F2")
-    zeilen = [
-        f"Feldgroesse {feld_mm:g} mm  -  {ecken[0]} x {ecken[1]} innere Ecken  "
-        f"({spalten_f} x {zeilen_f} Felder)  -  Brett {brett_b:g} x {brett_h:g} mm",
-        "Drucken mit TATSAECHLICHER GROESSE / 100 % - nicht 'An Seite anpassen'.",
-        "Mattes Papier oder matte Klebefolie verwenden, kein Glanz.",
-        "Nach dem Druck die Kontrollstrecke unten nachmessen und den gemessenen",
-        "Wert als feld_mm in kalibrierung_schachbrett.py eintragen.",
-    ]
-    for i, z in enumerate(zeilen):
-        s.text(20, oben - 27 - i * 5, z, 9.5)
-
-    ruhe = max(feld_mm, 8)
-    gesamt = kopien * brett_b + (kopien - 1) * 22
-    x_start = (A4[0] - gesamt) / 2
-    y_unten = oben - 62 - brett_h
-
-    for k in range(kopien):
-        x0 = x_start + k * (brett_b + 22)
-        for i in range(zeilen_f):
-            for j in range(spalten_f):
-                if (i + j) % 2 == 0:
-                    s.rechteck(x0 + j * feld_mm, y_unten + i * feld_mm,
-                               feld_mm, feld_mm, grau=0.0)
-        s.rechteck(x0, y_unten, brett_b, brett_h, gefuellt=False, strich=0.3)
-
-        # Eckwinkel ausserhalb der Ruhezone: beim Zuschneiden hier bleiben,
-        # der weisse Rand gehoert zum Muster
-        for ex, ey, sx, sy in ((x0 - ruhe, y_unten - ruhe, 1, 1),
-                               (x0 + brett_b + ruhe, y_unten - ruhe, -1, 1),
-                               (x0 - ruhe, y_unten + brett_h + ruhe, 1, -1),
-                               (x0 + brett_b + ruhe, y_unten + brett_h + ruhe, -1, -1)):
-            s.linie(ex, ey, ex + sx * 6, ey, grau=0.55, breite=0.4)
-            s.linie(ex, ey, ex, ey + sy * 6, grau=0.55, breite=0.4)
-
-        s.text_mittig((x0 + brett_b / 2) * PT, y_unten - ruhe - 5,
-                      f"{feld_mm:g} mm Felder", 8)
-
-    # Kontrollstrecke
-    y_skala = y_unten - 34
-    s.linie(20, y_skala, 20 + MESSSTRECKE_MM, y_skala, grau=0.0, breite=0.8)
-    for i in range(int(MESSSTRECKE_MM // 10) + 1):
-        s.linie(20 + i * 10, y_skala, 20 + i * 10, y_skala + (3.5 if i % 5 == 0 else 2),
-                grau=0.0, breite=0.8)
-    s.text(20, y_skala - 4.5, f"Kontrollstrecke {MESSSTRECKE_MM:.0f},0 mm", 9, "F2")
-    s.text(66, y_skala - 4.5, "nachmessen! Abweichung = Druckerskalierung", 8)
-
-    s.text(20, 18, "Der weisse Rand um jedes Brett gehoert dazu (Ruhezone) - beim "
-                   "Zuschneiden an den Eckwinkeln stehen lassen,", 8.5, "F3")
-    s.text(20, 13.5, "sonst findet die Eckenerkennung das Muster nicht.", 8.5, "F3")
-
-    pfad = os.path.join(BASE, f"schachbrett_{feld_mm:g}mm_{ecken[0]}x{ecken[1]}.pdf")
-    pdf_schreiben(pfad, s)
-    return pfad, (brett_b, brett_h)
-
-
 FORMATE = {"a4": (210.0, 297.0), "a3": (297.0, 420.0)}
 RAND_MIN_MM = 12.0     # weisse Ruhezone ringsum, mindestens
+
+
+def blatt_masse(feld_mm, formatname):
+    """Masse des Musterbogens OHNE ihn zu schreiben -> (ecken, brett_mm, rand).
+
+    Getrennt von blatt_bauen, damit die Messoberflaeche ihre Vorgabewerte
+    daraus ableiten kann. Fest eingetragene Zahlen waeren ein Fehler mit
+    Ansage: Sie wandern nicht mit, wenn sich die Feldgroesse oder das Format
+    aendert, und am Messtag steht dann 'kein Schachbrett gefunden'."""
+    seite_b, seite_h = FORMATE[formatname]
+    nutz_b, nutz_h = seite_b - 2 * RAND_MIN_MM, seite_h - 2 * RAND_MIN_MM
+    felder_b = int(nutz_b // feld_mm)
+    felder_h = int(nutz_h // feld_mm)
+
+    # innere Ecken = Felder - 1; auf gerade x ungerade bringen
+    if (felder_b - 1) % 2 != 0:      # Spalten-Ecken sollen gerade sein
+        felder_b -= 1
+    if (felder_h - 1) % 2 == 0:      # Zeilen-Ecken sollen ungerade sein
+        felder_h -= 1
+
+    brett_b, brett_h = felder_b * feld_mm, felder_h * feld_mm
+    x0, y0 = (seite_b - brett_b) / 2, (seite_h - brett_h) / 2
+    return (felder_b - 1, felder_h - 1), (brett_b, brett_h), (x0, y0), \
+           (felder_b, felder_h)
 
 
 def blatt_bauen(feld_mm, formatname):
@@ -181,18 +144,8 @@ def blatt_bauen(feld_mm, formatname):
     mehrdeutig und die Zuordnung kann kippen.
     """
     seite_b, seite_h = FORMATE[formatname]
-    nutz_b, nutz_h = seite_b - 2 * RAND_MIN_MM, seite_h - 2 * RAND_MIN_MM
-    felder_b = int(nutz_b // feld_mm)
-    felder_h = int(nutz_h // feld_mm)
-
-    # innere Ecken = Felder - 1; auf gerade x ungerade bringen
-    if (felder_b - 1) % 2 != 0:      # Spalten-Ecken sollen gerade sein
-        felder_b -= 1
-    if (felder_h - 1) % 2 == 0:      # Zeilen-Ecken sollen ungerade sein
-        felder_h -= 1
-
-    brett_b, brett_h = felder_b * feld_mm, felder_h * feld_mm
-    x0, y0 = (seite_b - brett_b) / 2, (seite_h - brett_h) / 2
+    ecken, (brett_b, brett_h), (x0, y0), (felder_b, felder_h) = \
+        blatt_masse(feld_mm, formatname)
 
     s = Seite()
     for i in range(felder_h):
@@ -200,7 +153,6 @@ def blatt_bauen(feld_mm, formatname):
             if (i + j) % 2 == 0:
                 s.rechteck(x0 + j * feld_mm, y0 + i * feld_mm, feld_mm, feld_mm, grau=0.0)
 
-    ecken = (felder_b - 1, felder_h - 1)
     pfad = os.path.join(BASE, f"muster_{formatname.upper()}_{feld_mm:g}mm_"
                               f"{ecken[0]}x{ecken[1]}.pdf")
     pdf_schreiben(pfad, s, (seite_b, seite_h))
@@ -214,23 +166,13 @@ def blaetter(feld_mm):
         print(f"{name.upper()}: {ecken[0]} x {ecken[1]} innere Ecken, "
               f"Muster {bb:g} x {bh:g} mm, Rand {rx:.1f} / {ry:.1f} mm")
         print(f"   -> {os.path.basename(pfad)}")
-        print(f"      in kalibrierung_schachbrett.py:  ecken=({ecken[0]}, {ecken[1]}), "
-              f"feld_mm={feld_mm:g}\n")
+        print(f"      Vorgabe in der Messoberflaeche: {ecken[0]} x {ecken[1]} "
+              f"innere Ecken, {feld_mm:g} mm\n")
     print("Drucken mit TATSAECHLICHER GROESSE / 100 %, mattes Papier.")
     print("Den weissen Rand NICHT wegschneiden - ohne ihn wird das Muster nicht erkannt.")
-    print("Feldgroesse nach dem Druck nachmessen und den gemessenen Wert eintragen.")
+    print(f"Nach dem Druck 10 Felder am Stueck mit dem Messschieber nachmessen und")
+    print(f"durch 10 teilen; diesen Wert im Kalibrierreiter als Feldgroesse eintragen.")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1].lower() == "blatt":
-        blaetter(float(sys.argv[2]) if len(sys.argv) > 2 else FELD_MM)
-        sys.exit()
-
-    feld = float(sys.argv[1]) if len(sys.argv) > 1 else FELD_MM
-    ecken = (int(sys.argv[2]), int(sys.argv[3])) if len(sys.argv) > 3 else ECKEN
-    pfad, (b, h) = bauen(feld, ecken)
-    print(f"-> {pfad}")
-    print(f"   {ecken[0]} x {ecken[1]} innere Ecken, Feld {feld:g} mm, Brett {b:g} x {h:g} mm")
-    print(f"   In kalibrierung_schachbrett.py eintragen:")
-    print(f"     ecken=({ecken[0]}, {ecken[1]}), feld_mm={feld:g}")
-    print(f"   feld_mm nach dem Druck durch den NACHGEMESSENEN Wert ersetzen.")
+    blaetter(float(sys.argv[1]) if len(sys.argv) > 1 else FELD_MM)
