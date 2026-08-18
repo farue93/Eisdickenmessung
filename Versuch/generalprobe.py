@@ -12,7 +12,7 @@ Ablauf (entspricht dem Versuchsplan):
   2  EIN Kalibrierbild simulieren (Muster perspektivisch auf ein echtes Panelbild)
   3  Kalibrierung aus einem Bild -> Massstabskarte
   4  Wahrer Massstabsfehler: Karte gegen die bekannte Homographie
-  5  Messbereich setzen (erzeugt, was roi_werkzeug.py speichert)
+  5  Messbereich: Vorschlag und Speicherung (gemeinsam/messbereich.py)
   6  Ordnerwache: Unterordner finden, halbfertige Dateien, Live-Modus
   7  Kamera simulieren: Frames laufen einzeln in einen Unterordner
   8  Flaechenmessung: Referenz sammeln, dann messen, mm2 ueber die Karte
@@ -251,18 +251,27 @@ def kalibrierung_pruefen(pfade, ecken, Hom):
 
 # ─────────────────────────────────────────────────────────── 5
 def messbereich_setzen(grundbild, ziel_npz):
-    """Erzeugt exakt das, was roi_werkzeug.py speichert. Die Oberflaeche selbst
-    ist Handarbeit; geprueft wird hier das Format und dass die Messung damit
-    umgehen kann."""
+    """Vorschlag rechnen, Ausschluss anwenden, speichern - der Weg, den der
+    Reiter 'Messbereich' geht. Das Anpassen von Hand ist Handarbeit; geprueft
+    wird, dass Vorschlag, Format und Auswertung zusammenpassen."""
+    from gemeinsam import messbereich as mbr
     g = cv2.imread(grundbild, cv2.IMREAD_GRAYSCALE)
     H, W = g.shape
-    x0, y0, x1, y1 = int(W * 0.05), int(H * 0.05), int(W * 0.95), int(H * 0.50)
-    m = np.zeros((H, W), np.uint8)
-    m[y0:y1, x0:x1] = 1
-    np.savez(ziel_npz, maske=m, bbox=np.array([x0, y0, x1, y1]),
-             flaeche_px=int(m.sum()), quelle=os.path.basename(grundbild))
-    return melde("Messbereich", int(m.sum()) > 0,
-                 f"{int(m.sum()):,} px, Zuschnitt {x1-x0}x{y1-y0}".replace(",", "."))
+    v = mbr.vorschlagen(g)
+    melde("Messbereich vorgeschlagen", v is not None,
+          f"{v[2]-v[0]}x{v[3]-v[1]} ab ({v[0]},{v[1]}), "
+          f"{100*(v[2]-v[0])*(v[3]-v[1])/(W*H):.0f}% des Bildes" if v else "kein Vorschlag")
+    if v is None:
+        v = (int(W * 0.05), int(H * 0.05), int(W * 0.95), int(H * 0.50))
+    # Wie beim Anpassen von Hand: Rechteck etwas verkleinern, eine Stoerstelle
+    # ausschliessen - genau das, was der Reiter mit Anfassern und Pinsel tut.
+    v = (v[0] + 40, v[1] + 40, v[2] - 40, v[3] - 40)
+    aus = np.zeros((H, W), np.uint8)
+    cv2.circle(aus, (v[0] + 300, v[1] + 300), 150, 1, -1)
+    b = mbr.speichern(ziel_npz, g, v, aus, quelle=os.path.basename(grundbild))
+    melde("Messbereich gespeichert", b["ok"] and b["ausgeschlossen"] > 0,
+          mbr.bericht_text(b) if b["ok"] else b["fehler"])
+    return b["ok"]
 
 
 # ─────────────────────────────────────────────────────────── 6

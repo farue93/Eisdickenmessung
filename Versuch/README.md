@@ -19,7 +19,6 @@ mehr, das vorher laufen müsste.
 |---|---|
 | `start_laser.bat` → `messung_laser.py` | **Messoberfläche Laser-PC** |
 | `start_flaeche.bat` → `messung_flaeche.py` | **Messoberfläche Flächen-PC** |
-| `start_roi.bat` → `roi_werkzeug.py` | Messbereich setzen — wird auch aus der Flächenoberfläche heraus gestartet |
 | `start_schachbrett.bat` → `schachbrett_drucken.py` | Druckvorlagen neu erzeugen |
 | `start_trockentest.bat` → `trockentest.py` | Vorabprüfung ohne Kamera |
 | `generalprobe.py` | ganzer Ablauf in einem Durchlauf, vor dem Messtag |
@@ -41,7 +40,7 @@ läuft alles, nur langsamer — die Programme erkennen das selbst und zeigen es 
 ## Die Reiter
 
 **Laser-PC:** `Kalibrierung` · `Messung` · `Anleitung`
-**Flächen-PC:** `Kalibrierung unten` · `Messung unten` · `Kalibrierung oben` · `Messung oben` · `Anleitung`
+**Flächen-PC:** je Kamera `Kalibrierung` · `Messbereich` · `Messung`, dazu `Anleitung`
 
 Der Reiter **Anleitung** zeigt genau diesen Text — mit Inhaltsverzeichnis und
 Suche, direkt im Programm. Am Kanal muss also nichts nachgeschlagen werden.
@@ -58,8 +57,8 @@ erledigt ist. Solange dort ein roter Punkt steht, fehlt etwas.
 |---|---|---|
 | 1 | Kalibrierreiter | Schachbrettbilder laden (mehrere Positionen!) → läuft automatisch |
 | 2 | Kalibrierreiter | prüfen, ggf. von Hand nachhelfen, **Übernehmen** |
-| 3 | Messreiter | **Kamera verbinden** |
-| 4 | Messreiter | **Messbereich festlegen …** (nur Fläche) |
+| 3 | Messbereichsreiter | Bild wählen → Vorschlag → anpassen → **Übernehmen** (nur Fläche) |
+| 4 | Messreiter | **Kamera verbinden** |
 | 5 | Messreiter | **Eisfrei-Referenz aufnehmen** — **vor** dem Sprühen |
 | 6 | Messreiter | **Messung starten**, dann sprühen |
 
@@ -223,20 +222,43 @@ genähert. Auch das steht im Bericht.
 
 ---
 
-## Messbereich (nur Fläche)
+## Der Messbereichsreiter (nur Fläche)
 
 > Die Panelmaske der bisherigen Auswertung gehört zur **damaligen
 > Kameraposition**. Sobald die Kameras neu ausgerichtet sind, weist sie den
 > falschen Bildbereich als Bezugsfläche aus.
 
-„Messbereich festlegen …" öffnet das ROI-Fenster auf dem aktuellen Bild:
-Rechteck aufziehen, optional mit dem Pinsel Störbereiche ausschließen, `s`
-speichern, `q` schließen. Die Datei wird automatisch übernommen.
+Derselbe Dreischritt wie bei der Kalibrierung:
+
+**1 · Bild wählen** — über **Bild wählen …** ein **eisfreies** Bild dieser
+Kamera aus der Dateiauswahl.
+
+**2 · Vorschlag** — läuft sofort danach. Der Vorschlag ist die größte
+zusammenhängende helle Fläche: das Panel hebt sich vom dunklen Kanalhintergrund
+ab. Auf der Testreihe trifft er das von Hand geprüfte Ergebnis mit IoU 0,87 —
+gleicher oberer Rand, etwas schmaler. Er ist ausdrücklich zum Anpassen gedacht,
+kein Orakel.
+
+**3 · Anpassen** — direkt im Bild:
+
+| Ziehen | Wirkung |
+|---|---|
+| an einer **Ecke** | Größe ändern |
+| **innerhalb** des Rechtecks | ganzes Rechteck verschieben |
+| **außerhalb** | neues Rechteck aufziehen |
+| Mausrad / rechte Taste | zoomen / schieben |
+
+Mit dem **Pinsel** lassen sich Störstellen innerhalb des Rechtecks
+ausschließen — Halterungen, Reflexe, Kanalwand — und mit *freigeben* wieder
+zurücknehmen. „letzten Strich zurück" macht einen ganzen Pinselzug rückgängig.
+
+**Für die Messung übernehmen** speichert und trägt die Datei im Messreiter ein.
+Daneben entsteht ein Kontrollbild.
 
 Bewusst ohne SAM — kein Zusatzpaket, kein 40-MB-Modell, kein Fehlschlag im
 ungünstigen Moment. Die physikalisch belastbare Größe ist ohnehin die Fläche in
-mm² aus der Kalibrierung; der Prozentwert bezieht sich auf das Rechteck und ist
-als solcher zu protokollieren.
+mm² aus der Kalibrierung; der Prozentwert bezieht sich auf dieses Rechteck und
+ist als solcher zu protokollieren.
 
 **Jede Kamera braucht ihren eigenen Messbereich.** Wird er geändert, verwirft
 das Programm die Eisfrei-Referenz — sie gehörte zum alten Zuschnitt und wäre
@@ -252,7 +274,8 @@ messbereich.npz | Zuschnitt 850x500 ab (150,100) | Bezug 425.000 px
 
 Also: welche Datei, wie groß das Rechteck ist, wo es im Vollbild sitzt und wie
 viele Pixel die Bezugsfläche der Prozentangabe hat. Ohne diese Angaben ist ein
-Prozentwert später nicht mehr zu deuten.
+Prozentwert später nicht mehr zu deuten. Dieselben Angaben stehen live im
+Messbereichsreiter, während du das Rechteck ziehst.
 
 **Rand abtragen (px)** schrumpft den Bereich ringsum, Standard **0** — gemessen
 wird, was gezogen wurde. Sinnvoll nur, wenn die Panelkante im Bild unscharf ist
@@ -452,3 +475,5 @@ dadurch nichts verloren.
 | Messung stoppt von selbst | Messbereich wurde geändert → Referenz ist ungültig, neu aufnehmen |
 | Laser: „zu wenige Linienpunkte" | Schwelle zu hoch, Laser nicht im Bild, oder falsches Modell |
 | Fläche: alles oder nichts erkannt | Falscher Messbereich, oder Beleuchtung weicht stark vom Training ab → Nachtraining nötig |
+| Vorschlag sitzt daneben | Ecken ziehen oder außerhalb ein neues Rechteck aufziehen — der Vorschlag ist nur der erste Wurf |
+| Rechteck lässt sich nicht mehr anfassen | Nach dem Pinseln erst **Rechteck bearbeiten** drücken |

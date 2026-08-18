@@ -28,7 +28,7 @@ Deshalb wird ohne Referenz nicht gemessen.
 
 Start:  start_flaeche.bat   oder   python messung_flaeche.py
 """
-import os, sys, json, time, threading, queue, subprocess
+import os, sys, json, time, threading, queue
 import tkinter as tk
 from tkinter import ttk
 
@@ -41,6 +41,7 @@ from gemeinsam.konfig import Konfig
 from gemeinsam.ordnerwache import Ordnerwache, bild_lesen, AUTO
 from gemeinsam.massstab import Massstab
 from gemeinsam.kalibrier_tab import KalibrierTab
+from gemeinsam.bereich_tab import BereichTab
 from gemeinsam.anleitung import AnleitungTab
 from gemeinsam.kalibrierung import vorgabe
 from gemeinsam import geraet as ger
@@ -276,11 +277,11 @@ class Kamerapanel(ttk.Frame):
         self.f_bereich = gui.Pfadfeld(c, "Messbereich (.npz)", self.kfg["messbereich"],
                                       "datei", [("NumPy", "*.npz"), ("Alle", "*.*")])
         self.f_bereich.pack(fill="x", pady=2)
+        ttk.Label(c, text=f"wird im Reiter 'Messbereich {self.kennung}' festgelegt",
+                  foreground="#666").pack(anchor="w")
         self.f_rand = gui.Feld(c, "Rand abtragen", self.kfg["rand_abtragen"], 8, "px",
                                "0 = so wie gezogen")
         self.f_rand.pack(fill="x", pady=2)
-        ttk.Button(c, text="Messbereich festlegen ...",
-                   command=self._bereich_setzen).pack(fill="x", pady=(6, 2))
         ttk.Button(c, text="Datei/Rand uebernehmen",
                    command=lambda: self._befehl("bereich")).pack(fill="x", pady=2)
 
@@ -387,34 +388,12 @@ class Kamerapanel(ttk.Frame):
         else:
             self.z_mass.setzen("keine - Ausgabe nur in Prozent", "warn")
 
-    # -------------------------------------------------- Messbereich
-    def _bereich_setzen(self):
-        """Das ROI-Werkzeug auf dem zuletzt empfangenen Bild starten und das
-        Ergebnis uebernehmen, sobald das Fenster geschlossen wird."""
-        if not self.letzter_pfad:
-            self.status.setzen("erst 'Kamera verbinden' - es wird ein Bild gebraucht",
-                               "fehler")
-            return
+    def messbereich_setzen(self, npz):
+        """Wird vom zugehoerigen Messbereichsreiter gerufen."""
+        self.f_bereich.setzen(npz)
         self._sammeln()
-        ziel = self.kfg["messbereich"] or os.path.join(
-            BASE, f"messbereich_flaeche_{self.kennung}.npz")
-        self.status.setzen("ROI-Fenster: Rechteck aufziehen, 's' speichern, 'q' schliessen",
-                           "warn")
-
-        def lauf():
-            try:
-                subprocess.run([sys.executable, os.path.join(BASE, "roi_werkzeug.py"),
-                                self.letzter_pfad, ziel], check=False)
-            except Exception as e:
-                self.warteschlange.put(("status", (f"ROI-Werkzeug: {e}", "fehler")))
-                return
-            if os.path.exists(ziel):
-                self.warteschlange.put(("bereichpfad", ziel))
-                self.befehle.put("bereich")
-            else:
-                self.warteschlange.put(("status", ("kein Messbereich gespeichert", "warn")))
-
-        threading.Thread(target=lauf, daemon=True).start()
+        if self.verbunden:
+            self.befehle.put("bereich")
 
     # -------------------------------------------------- Steuerung
     def _befehl(self, name):
@@ -707,10 +686,15 @@ def main():
     # von links nach rechts - erst kalibrieren, dann messen.
     for kennung, titel in KAMERAS:
         mess = Kamerapanel(reiter, kennung, titel)
+        ordner = lambda m=mess: m.kfg["aufnahme_ordner"]
         kalib = KalibrierTab(reiter, mess.kfg, f"flaeche_{kennung}", titel, "rechteck",
                              bei_uebernahme=mess.kalibrierung_setzen,
-                             startordner=lambda m=mess: m.kfg["aufnahme_ordner"])
+                             startordner=ordner)
+        bereich = BereichTab(reiter, mess.kfg, f"flaeche_{kennung}", titel,
+                             bei_uebernahme=mess.messbereich_setzen,
+                             startordner=ordner)
         reiter.add(kalib, text=f"Kalibrierung {kennung}")
+        reiter.add(bereich, text=f"Messbereich {kennung}")
         reiter.add(mess, text=f"Messung {kennung}")
     reiter.add(AnleitungTab(reiter), text="Anleitung")
     wurzel.mainloop()

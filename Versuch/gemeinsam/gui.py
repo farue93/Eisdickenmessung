@@ -157,20 +157,28 @@ class Bildleinwand(ttk.Frame):
     grob. Mit Zoom wird sie pixelgenau.
     """
 
-    def __init__(self, eltern, breite=900, hoehe=520, bei_form=None):
+    GRIFF_PX = 12                # Fangbereich der Eckanfasser, in Anzeigepixeln
+
+    def __init__(self, eltern, breite=900, hoehe=520, bei_form=None,
+                 bei_pinsel=None):
         super().__init__(eltern)
         self.breite, self.hoehe, self.bei_form = breite, hoehe, bei_form
+        self.bei_pinsel = bei_pinsel
         self.leinwand = tk.Canvas(self, width=breite, height=hoehe,
                                   background="#111", highlightthickness=0,
                                   cursor="crosshair")
         self.leinwand.pack(fill="both", expand=True)
         self.quelle = None
+        self.maske = None            # uint8, >0 wird eingefaerbt (Ausschluss)
         self.zoom, self.ox, self.oy = 1.0, 0, 0
         self._x0 = self._y0 = 0
         self._bild = None
-        self.art = None              # None | "rechteck" | "strecke"
+        self.art = None              # None | "rechteck" | "strecke" | "pinsel"
+        self.griffe = False          # Eckanfasser zeigen und ziehbar machen
+        self.pinselradius = 40
         self.punkte = []             # gesetzte Punkte in BILDkoordinaten
         self._zieht = False
+        self._griff = None           # Index der gepackten Ecke, oder "innen"
         self._schiebt = None
 
         self.leinwand.bind("<ButtonPress-1>", self._links_ab)
@@ -179,7 +187,26 @@ class Bildleinwand(ttk.Frame):
         self.leinwand.bind("<ButtonPress-3>", self._rechts_ab)
         self.leinwand.bind("<B3-Motion>", self._rechts_zieh)
         self.leinwand.bind("<MouseWheel>", self._rad)
-        self.leinwand.bind("<Configure>", lambda e: self._zeichnen())
+        self.leinwand.bind("<Configure>", self._eingerichtet)
+        self._einpassen_noetig = False
+
+    def _groesse(self):
+        """Leinwandgroesse -> (breite, hoehe, schon_eingerichtet).
+
+        Vor dem ersten Anzeigen meldet Tk die Breite 1, nicht 0 - ein
+        'winfo_width() or 900' faellt darauf herein und rechnet den Zoom auf
+        einem Pixel aus. Das Bild erschien dann als Punkt, bis jemand
+        'einpassen' drueckte."""
+        cb, ch = self.leinwand.winfo_width(), self.leinwand.winfo_height()
+        if cb <= 1 or ch <= 1:
+            return self.breite, self.hoehe, False
+        return cb, ch, True
+
+    def _eingerichtet(self, _=None):
+        if self._einpassen_noetig:
+            self.einpassen()
+        else:
+            self._zeichnen()
 
     # ---------------------------------------------------------- Bild
     def bild_setzen(self, bgr, einpassen=True):
@@ -193,21 +220,36 @@ class Bildleinwand(ttk.Frame):
     def einpassen(self):
         if self.quelle is None:
             return
-        cb = self.leinwand.winfo_width() or self.breite
-        ch = self.leinwand.winfo_height() or self.hoehe
+        cb, ch, fertig = self._groesse()
         H, W = self.quelle.shape[:2]
         self.zoom = min(cb / W, ch / H)
         self.ox = self.oy = 0
+        # Solange die Leinwand ihre echte Groesse noch nicht kennt, bleibt der
+        # Wunsch offen und wird beim ersten <Configure> nachgeholt.
+        self._einpassen_noetig = not fertig
         self._zeichnen()
 
     # ---------------------------------------------------------- Werkzeug
-    def werkzeug(self, art):
+    def werkzeug(self, art, griffe=False, behalten=False):
+        """behalten=True laesst eine vorhandene Form stehen - noetig, wenn ein
+        Vorschlag angezeigt und danach angepasst werden soll."""
         self.art = art
-        self.punkte = []
+        self.griffe = griffe
+        if not behalten:
+            self.punkte = []
         self._zeichnen()
 
     def form_loeschen(self):
         self.punkte = []
+        self._zeichnen()
+
+    def form_setzen(self, form):
+        """Rechteck von aussen vorgeben (Vorschlag)."""
+        if form is None:
+            self.punkte = []
+        else:
+            x0, y0, x1, y1 = form
+            self.punkte = [(float(x0), float(y0)), (float(x1), float(y1))]
         self._zeichnen()
 
     def form(self):
@@ -221,6 +263,28 @@ class Bildleinwand(ttk.Frame):
                     int(max(ax, bx)), int(max(ay, by)))
         return ((ax, ay), (bx, by))
 
+    def _ecken(self):
+        """Die vier Ecken des Rechtecks in Bildkoordinaten, feste Reihenfolge:
+        oben links, oben rechts, unten rechts, unten links."""
+        f = self.form()
+        if f is None or self.art != "rechteck":
+            return []
+        x0, y0, x1, y1 = f
+        return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+
+    def _griff_finden(self, cx, cy):
+        """Welche Ecke liegt unter dem Zeiger? -> Index, 'innen' oder None."""
+        for i, (bx, by) in enumerate(self._ecken()):
+            gx, gy = self._b2c(bx, by)
+            if abs(gx - cx) <= self.GRIFF_PX and abs(gy - cy) <= self.GRIFF_PX:
+                return i
+        f = self.form()
+        if f and self.art == "rechteck":
+            bx, by = self._c2b(cx, cy)
+            if f[0] <= bx <= f[2] and f[1] <= by <= f[3]:
+                return "innen"
+        return None
+
     # ---------------------------------------------------------- Umrechnung
     def _c2b(self, cx, cy):
         return (self._x0 + cx / self.zoom, self._y0 + cy / self.zoom)
@@ -232,22 +296,60 @@ class Bildleinwand(ttk.Frame):
     def _links_ab(self, e):
         if self.quelle is None or self.art is None:
             return
+        if self.art == "pinsel":
+            self._zieht = True
+            self._malen(e, neu=True)
+            return
+        # Anfasser haben Vorrang: erst anpassen, dann neu aufziehen. Ohne das
+        # wuerde jeder Klick den Vorschlag verwerfen, statt ihn zu aendern.
+        if self.griffe:
+            g = self._griff_finden(e.x, e.y)
+            if g is not None:
+                self._griff = g
+                self._start = (self._c2b(e.x, e.y), list(self.punkte))
+                self._zieht = True
+                return
+        self._griff = None
         self.punkte = [self._c2b(e.x, e.y)]
         self._zieht = True
 
     def _links_zieh(self, e):
         if not self._zieht:
             return
+        if self.art == "pinsel":
+            self._malen(e); return
         p = self._c2b(e.x, e.y)
-        self.punkte = [self.punkte[0], p]
+        if self._griff is None:
+            self.punkte = [self.punkte[0], p]
+        elif self._griff == "innen":
+            (sx, sy), alt = self._start
+            dx, dy = p[0] - sx, p[1] - sy
+            self.punkte = [(a[0] + dx, a[1] + dy) for a in alt]
+        else:
+            # Die gepackte Ecke wandert mit; die diagonal gegenueberliegende
+            # bleibt liegen und spannt das Rechteck neu auf.
+            ecken = self._ecken()
+            fest = ecken[(self._griff + 2) % 4]
+            self.punkte = [fest, p]
         self._zeichnen()
 
     def _links_auf(self, e):
         if not self._zieht:
             return
         self._zieht = False
+        if self.art == "pinsel":
+            return
+        self._griff = None
         if len(self.punkte) == 2 and self.bei_form:
             self.bei_form(self.form())
+
+    def _malen(self, e, neu=False):
+        """neu=True beim Aufsetzen des Stiftes - daran erkennt der Empfaenger
+        den Beginn eines Striches und kann ihn als Ganzes zuruecknehmen."""
+        if self.bei_pinsel:
+            bx, by = self._c2b(e.x, e.y)
+            self.bei_pinsel(bx, by, self.pinselradius, neu)
+            self._zeichnen()
 
     def _rechts_ab(self, e):
         self._schiebt = (e.x, e.y, self.ox, self.oy)
@@ -266,8 +368,8 @@ class Bildleinwand(ttk.Frame):
         bx, by = self._c2b(e.x, e.y)                # Punkt unter dem Zeiger
         faktor = 1.25 if e.delta > 0 else 1 / 1.25
         H, W = self.quelle.shape[:2]
-        cb = self.leinwand.winfo_width() or self.breite
-        klein = min(cb / W, (self.leinwand.winfo_height() or self.hoehe) / H)
+        cb, ch, _ = self._groesse()
+        klein = min(cb / W, ch / H)
         self.zoom = max(klein * 0.9, min(16.0, self.zoom * faktor))
         # denselben Bildpunkt wieder unter den Zeiger legen
         self.ox = bx - e.x / self.zoom
@@ -280,8 +382,7 @@ class Bildleinwand(ttk.Frame):
         c.delete("all")
         if self.quelle is None:
             return
-        cb = c.winfo_width() or self.breite
-        ch = c.winfo_height() or self.hoehe
+        cb, ch, _ = self._groesse()
         H, W = self.quelle.shape[:2]
         sicht_b, sicht_h = cb / self.zoom, ch / self.zoom
         self.ox = max(-sicht_b * 0.2, min(self.ox, W - sicht_b * 0.8))
@@ -300,6 +401,14 @@ class Bildleinwand(ttk.Frame):
         klein = cv2.resize(aus, (nb, nh),
                            interpolation=cv2.INTER_AREA if self.zoom < 1
                            else cv2.INTER_NEAREST)
+        if self.maske is not None and self.maske.shape[:2] == (H, W):
+            mk = cv2.resize(self.maske[y0:y1, x0:x1], (nb, nh),
+                            interpolation=cv2.INTER_NEAREST)
+            treffer = mk > 0
+            if treffer.any():
+                klein = klein.copy()
+                klein[treffer] = (klein[treffer] * 0.45
+                                  + np.array([40, 40, 210]) * 0.55).astype(np.uint8)
         self._bild = ImageTk.PhotoImage(Image.fromarray(klein[..., ::-1]))
         c.create_image(0, 0, anchor="nw", image=self._bild)
 
@@ -309,12 +418,23 @@ class Bildleinwand(ttk.Frame):
             cbx, cby = self._b2c(bx, by)
             if self.art == "rechteck":
                 c.create_rectangle(cax, cay, cbx, cby, outline="#FFD24A", width=2)
+                if self.griffe:
+                    for ex, ey in self._ecken():
+                        gx, gy = self._b2c(ex, ey)
+                        c.create_rectangle(gx-6, gy-6, gx+6, gy+6,
+                                           outline="#FFD24A", fill="#1b1b1b", width=2)
             else:
                 c.create_line(cax, cay, cbx, cby, fill="#FFD24A", width=2)
                 for px, py in ((cax, cay), (cbx, cby)):
                     c.create_oval(px-4, py-4, px+4, py+4, outline="#FFD24A", width=2)
+
+        hinweis = "Rad = zoomen, rechte Taste = schieben"
+        if self.art == "pinsel":
+            hinweis = f"Pinsel {self.pinselradius} px   " + hinweis
+        elif self.griffe:
+            hinweis = "Ecken ziehen = anpassen, innen ziehen = verschieben   " + hinweis
         c.create_text(6, ch - 8, anchor="sw", fill="#999",
-                      text=f"Zoom {self.zoom:.2f}x   Rad = zoomen, rechte Taste = schieben")
+                      text=f"Zoom {self.zoom:.2f}x   {hinweis}")
 
 
 class Verlauf(ttk.Frame):

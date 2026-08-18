@@ -33,7 +33,8 @@ def module():
     print("\nEigene Module:")
     for name in ("gemeinsam.konfig", "gemeinsam.ordnerwache", "gemeinsam.massstab",
                  "gemeinsam.kalibrierung", "gemeinsam.kalibrier_tab",
-                 "gemeinsam.geraet", "gemeinsam.gui"):
+                 "gemeinsam.messbereich", "gemeinsam.bereich_tab",
+                 "gemeinsam.anleitung", "gemeinsam.geraet", "gemeinsam.gui"):
         try:
             __import__(name); print(f"  {name:22s} OK")
         except Exception as e:
@@ -70,7 +71,6 @@ def module():
     print("\nProgramme fuer den Messtag:")
     for beschreibung, datei in (("Lasermessung", "messung_laser.py"),
                                 ("Flaechenmessung", "messung_flaeche.py"),
-                                ("Messbereich setzen", "roi_werkzeug.py"),
                                 ("Druckvorlage", "schachbrett_drucken.py")):
         da = os.path.exists(os.path.join(BASE, datei))
         print(f"  {beschreibung:18s} {'gefunden' if da else 'FEHLT'}")
@@ -97,8 +97,8 @@ def module():
         print("  PRUEFEN, ob er zur AKTUELLEN Kameraposition passt.")
         print("  Ein Messbereich aus einem frueheren Aufbau ist wertlos.")
     else:
-        print("  noch nicht gesetzt - am Messtag in der Flaechen-Oberflaeche")
-        print("  ueber 'Messbereich festlegen ...' anlegen (kein Fehler: gehoert vor Ort)")
+        print("  noch nicht gesetzt - am Messtag im Reiter 'Messbereich'")
+        print("  der Flaechen-Oberflaeche anlegen (kein Fehler: gehoert vor Ort)")
 
     print("\nErgebnis:", "alles bereit" if not fehlt else f"FEHLT: {fehlt}")
 
