@@ -346,7 +346,7 @@ def probe_flaeche(kalib_npz):
 
     REF = 4
     aus = mf.Auswerter(os.path.join(BASE, "modelle", "flaeche.pt"), 0.5, "auto")
-    px = aus.panel_laden(os.path.join(ARBEIT, "messbereich.npz"))
+    px = aus.panel_laden(os.path.join(ARBEIT, "messbereich.npz"))["px"]
     print(f"   Modell: {aus.kanaele} Kanal/Kanaele, {aus.geraet_text}")
     print(f"   Messbereich: {px:,} px".replace(",", "."))
     ms = Massstab(kalib_npz)

@@ -242,6 +242,41 @@ als solcher zu protokollieren.
 das Programm die Eisfrei-Referenz — sie gehörte zum alten Zuschnitt und wäre
 sonst stillschweigend falsch.
 
+### Welcher Zuschnitt wirklich gilt
+
+Die Zustandszeile **Messbereich** zeigt ihn vollständig:
+
+```
+messbereich.npz | Zuschnitt 850x500 ab (150,100) | Bezug 425.000 px
+```
+
+Also: welche Datei, wie groß das Rechteck ist, wo es im Vollbild sitzt und wie
+viele Pixel die Bezugsfläche der Prozentangabe hat. Ohne diese Angaben ist ein
+Prozentwert später nicht mehr zu deuten.
+
+**Rand abtragen (px)** schrumpft den Bereich ringsum, Standard **0** — gemessen
+wird, was gezogen wurde. Sinnvoll nur, wenn die Panelkante im Bild unscharf ist
+und mitgemessen würde.
+
+> Bis jetzt waren hier fest **25 px** eingebaut (eine Erosion mit 51×51), aus
+> der Zeit der SAM-Panelmaske mit ihrem ausgefransten Rand. Bei einem von Hand
+> gezogenen Rechteck verschwanden dadurch 25 px ringsum, ohne dass es irgendwo
+> stand: aus 425 000 px Bezugsfläche wurden 360 000 — **15 % weniger**, und
+> jeder Bedeckungsgrad damit rund 18 % zu hoch.
+
+### Laser: der Ausschnitt um die Linie
+
+Auch der Laser schneidet zu — für die gespeicherten Bilder. Die Zustandszeile
+**Bildausschnitt** zeigt ihn, sobald die Geometrie steht:
+
+```
+1455x1179 ab (289,254) | Rand 40 px um die Linie
+```
+
+Das Rechteck ergibt sich aus den Stützstellen der Laserlinie plus dem Feld
+**Ausschnittsrand**. Es betrifft **nur** die Dateien in `crops/` — gemessen
+wird immer auf dem vollen Bild.
+
 ---
 
 ## Eisfrei-Referenz — der eine Punkt ohne Reparatur
@@ -297,6 +332,8 @@ gegen den Zustand des vorherigen Laufs gerechnet.
 | Aufnahmeordner | Wurzelordner der Kamera. Unterordner werden selbst gefunden. |
 | Ergebnisordner | Je Messung entsteht darin ein Unterordner mit Zeitstempel. |
 | Kalibrierung (.npz) | Kommt aus dem Kalibrierreiter; kann auch von Hand gewählt werden. |
+| Rand abtragen (nur Fläche) | Pixel, die ringsum vom Messbereich abgezogen werden. Standard 0. |
+| Ausschnittsrand (nur Laser) | Rand um die Laserlinie für die gespeicherten Ausschnitte. Standard 40 px. |
 | Referenzframes | Anzahl eisfreier Bilder für den Nullzustand. |
 | Bildauswahl / N | siehe oben. |
 | Overlays mitspeichern | Ein JPEG je ausgewertetem Bild. Zum Abschalten, wenn die Platte knapp wird. |

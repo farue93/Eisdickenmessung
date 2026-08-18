@@ -61,6 +61,7 @@ def standard(kennung):
         "ergebnis_ordner": os.path.join(BASE, "ergebnisse", f"flaeche_{kennung}"),
         "modell": os.path.join(BASE, "modelle", "flaeche.pt"),
         "messbereich": "",
+        "rand_abtragen": 0,
         # --- Kalibrierreiter
         "kalibrierung": "",
         "kalibrierung_art": "",
@@ -110,20 +111,34 @@ class Auswerter:
         self.mad = None
 
     # ---- Messbereich
-    def panel_laden(self, npz_pfad):
+    def panel_laden(self, npz_pfad, rand=0):
+        """Messbereich laden -> Angaben zum Zuschnitt, oder None.
+
+        rand: wie viele Pixel ringsum ABGETRAGEN werden. Frueher waren das fest
+        25 px (Erosion mit 51x51). Das stammte aus der Zeit der SAM-Panelmaske,
+        deren Rand ausgefranst war - bei einem von Hand gezogenen Rechteck
+        verschwanden dadurch 25 px ringsum, ohne dass es irgendwo stand, und
+        die Bezugsflaeche der Prozentangabe schrumpfte still mit. Deshalb jetzt
+        einstellbar und standardmaessig 0: gemessen wird, was gezogen wurde."""
         if not npz_pfad or not os.path.exists(npz_pfad):
             return None
         p = np.load(npz_pfad)
         self.bbox = tuple(int(v) for v in p["bbox"])
-        maske = cv2.erode(p["maske"],
-                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (51, 51)))
+        maske = p["maske"]
+        roh_px = int(maske.sum())
+        rand = max(0, int(rand))
+        if rand:
+            k = 2 * rand + 1
+            maske = cv2.erode(maske, cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE, (k, k)))
         x0, y0, x1, y1 = self.bbox
         self.panel = maske[y0:y1, x0:x1] > 0
         # Der Referenzzustand gilt fuer den alten Zuschnitt - mit neuem
         # Messbereich passt er nicht mehr und muss neu aufgenommen werden.
         self.median = self.mad = None
         self._puffer = []
-        return int(self.panel.sum())
+        return dict(px=int(self.panel.sum()), roh_px=roh_px, rand=rand,
+                    bbox=self.bbox, breite=x1 - x0, hoehe=y1 - y0)
 
     def zuschneiden(self, img):
         if self.bbox is None:
@@ -177,6 +192,20 @@ class Auswerter:
     @property
     def bezugsflaeche_px(self):
         return int(self.panel.sum()) if self.panel is not None else None
+
+
+def _bereich_text(pfad, n):
+    """Eine Zeile, die den WIRKLICH benutzten Zuschnitt vollstaendig beschreibt:
+    Datei, Rechteck im Vollbild, Groesse, Bezugsflaeche und abgetragener Rand.
+    Ohne diese Angaben laesst sich ein Prozentwert spaeter nicht mehr deuten."""
+    x0, y0, x1, y1 = n["bbox"]
+    punkt = lambda v: f"{v:,}".replace(",", ".")
+    aus = (f"{os.path.basename(pfad)} | Zuschnitt {n['breite']}x{n['hoehe']} "
+           f"ab ({x0},{y0}) | Bezug {punkt(n['px'])} px")
+    if n["rand"]:
+        aus += (f" | Rand {n['rand']} px abgetragen "
+                f"(von {punkt(n['roh_px'])} px)")
+    return aus
 
 
 def overlay_bauen(crop, eis):
@@ -247,9 +276,12 @@ class Kamerapanel(ttk.Frame):
         self.f_bereich = gui.Pfadfeld(c, "Messbereich (.npz)", self.kfg["messbereich"],
                                       "datei", [("NumPy", "*.npz"), ("Alle", "*.*")])
         self.f_bereich.pack(fill="x", pady=2)
+        self.f_rand = gui.Feld(c, "Rand abtragen", self.kfg["rand_abtragen"], 8, "px",
+                               "0 = so wie gezogen")
+        self.f_rand.pack(fill="x", pady=2)
         ttk.Button(c, text="Messbereich festlegen ...",
                    command=self._bereich_setzen).pack(fill="x", pady=(6, 2))
-        ttk.Button(c, text="Datei uebernehmen",
+        ttk.Button(c, text="Datei/Rand uebernehmen",
                    command=lambda: self._befehl("bereich")).pack(fill="x", pady=2)
 
         d = gui.abschnitt(links, "4  Eisfrei-Referenz")
@@ -315,6 +347,7 @@ class Kamerapanel(ttk.Frame):
         k["modell"] = self.f_modell.text()
         k["kalibrierung"] = self.f_kal.text()
         k["messbereich"] = self.f_bereich.text()
+        k["rand_abtragen"] = max(0, self.f_rand.zahl(0, ganz=True))
         k["bildwahl"] = self.f_bildwahl.text()
         k["jedes_n_te"] = max(1, self.f_n.zahl(2, ganz=True))
         k["referenz_frames"] = max(1, self.f_ref.zahl(10, ganz=True))
@@ -437,9 +470,9 @@ class Kamerapanel(ttk.Frame):
             aus = Auswerter(k["modell"], k["schwelle"], k["geraet"])
             kanal = f"{aus.kanaele} " + ("Kanal" if aus.kanaele == 1 else "Kanaele")
             if k["messbereich"]:
-                n = aus.panel_laden(k["messbereich"])
-                m(("bereich", (f"{os.path.basename(k['messbereich'])} | "
-                               f"{n:,} px Bezugsflaeche".replace(",", "."), "ok")))
+                m(("bereich", (_bereich_text(k["messbereich"],
+                                             aus.panel_laden(k["messbereich"],
+                                                             k["rand_abtragen"])), "ok")))
             m(("status", (f"{aus.geraet_text} | {kanal} | Livebild - "
                           f"Massstab, Messbereich und Referenz setzen", "ok")))
 
@@ -455,12 +488,11 @@ class Kamerapanel(ttk.Frame):
 
                 if befehl == "bereich":
                     try:
-                        n = aus.panel_laden(k["messbereich"])
+                        n = aus.panel_laden(k["messbereich"], k["rand_abtragen"])
                     except Exception as e:
                         m(("bereich", (f"nicht lesbar: {e}", "fehler"))); n = None
                     if n:
-                        m(("bereich", (f"{os.path.basename(k['messbereich'])} | "
-                                       f"{n:,} px Bezugsflaeche".replace(",", "."), "ok")))
+                        m(("bereich", (_bereich_text(k["messbereich"], n), "ok")))
                         m(("ref", ("verworfen - neuer Messbereich, Referenz neu aufnehmen",
                                    "fehler")))
                         # Mit dem Messbereich faellt auch die Referenz weg. Eine

@@ -78,6 +78,7 @@ STANDARD = {
     "min_flaeche": 100,
     "overlays_speichern": True,
     "crops_speichern": False,
+    "ausschnitt_rand": 40,
     "geraet": "auto",
 }
 
@@ -205,20 +206,31 @@ class Auswerter:
                 d[i] = float(np.sum(t[m] * w) / np.sum(w))
         return d
 
+    def ausschnittsfeld(self, shape, rand=40):
+        """Das Rechteck um die Linie -> (x0, y0, x1, y1).
+
+        Getrennt vom Zuschneiden, damit die Oberflaeche anzeigen kann, WELCHER
+        Ausschnitt gilt. Ein Zuschnitt, den man nicht sieht und nicht aendern
+        kann, ist eine stille Annahme - und stille Annahmen faellt einem am
+        Messtag auf die Fuesse."""
+        if self.geo is None:
+            return None
+        g = self.geo
+        H, W = shape
+        rand = max(0, int(rand))
+        return (int(max(0, g["x"].min() - rand)), int(max(0, g["y"].min() - rand)),
+                int(min(W, g["x"].max() + rand)), int(min(H, g["y"].max() + rand)))
+
     def ausschnitt(self, img, rand=40):
-        """Bildausschnitt um die Linie herum - das, was die Messung benutzt.
+        """Bildausschnitt um die Linie herum.
 
         Fuer 'gecroppte Bilder mitspeichern': die Rohbilder liegen ohnehin im
         Kameraordner, der Ausschnitt ist deutlich kleiner und enthaelt genau
         den Bereich, aus dem der Messwert stammt."""
-        if self.geo is None:
+        f = self.ausschnittsfeld(img.shape, rand)
+        if f is None:
             return img
-        g = self.geo
-        H, W = img.shape
-        x0 = int(max(0, g["x"].min() - rand))
-        x1 = int(min(W, g["x"].max() + rand))
-        y0 = int(max(0, g["y"].min() - rand))
-        y1 = int(min(H, g["y"].max() + rand))
+        x0, y0, x1, y1 = f
         return img[y0:y1, x0:x1]
 
 
@@ -292,6 +304,9 @@ class Messreiter(ttk.Frame):
         self.v_crops = tk.BooleanVar(value=self.kfg["crops_speichern"])
         ttk.Checkbutton(d, text="gecroppte Bilder mitspeichern",
                         variable=self.v_crops).pack(anchor="w", pady=2)
+        self.f_arand = gui.Feld(d, "Ausschnittsrand", self.kfg["ausschnitt_rand"], 8,
+                                "px", "um die Linie")
+        self.f_arand.pack(fill="x", pady=2)
         self.k_messen = ttk.Button(d, text="Messung starten", command=self._messen)
         self.k_messen.pack(fill="x", pady=(6, 2))
 
@@ -327,9 +342,11 @@ class Messreiter(ttk.Frame):
         self.z_kamera = gui.Zustand(zust, "Kamera"); self.z_kamera.pack(fill="x")
         self.z_mass = gui.Zustand(zust, "Massstab"); self.z_mass.pack(fill="x")
         self.z_ref = gui.Zustand(zust, "Eisfrei-Referenz"); self.z_ref.pack(fill="x")
+        self.z_crop = gui.Zustand(zust, "Bildausschnitt"); self.z_crop.pack(fill="x")
         self.z_mess = gui.Zustand(zust, "Messung"); self.z_mess.pack(fill="x")
         self.z_kamera.setzen("nicht verbunden")
         self.z_ref.setzen("fehlt - vor dem Spruehen aufnehmen")
+        self.z_crop.setzen("ergibt sich aus der Geometrie", "warn")
         self.z_mess.setzen("laeuft nicht")
         self.status = gui.Statuszeile(rechts); self.status.pack(fill="x", pady=(8, 0))
         self.status.setzen("Aufnahmeordner waehlen, dann 'Kamera verbinden'")
@@ -353,6 +370,7 @@ class Messreiter(ttk.Frame):
         k["min_flaeche"] = max(1, self.f_minfl.zahl(100, ganz=True))
         k["overlays_speichern"] = bool(self.v_overlay.get())
         k["crops_speichern"] = bool(self.v_crops.get())
+        k["ausschnitt_rand"] = max(0, self.f_arand.zahl(40, ganz=True))
         k["geraet"] = self.v_geraet.get()
         k.speichern()
 
@@ -510,6 +528,7 @@ class Messreiter(ttk.Frame):
                     self.modus = "vorschau"
                     m(("ref", (f"steht - {len(aus.geo['x'])} Stuetzstellen, "
                                f"{k['referenz_frames']} Frames", "ok")))
+                    m(("crop", (self._crop_text(aus, img.shape), "ok")))
                     m(("status", ("Referenz steht - Messung starten, dann spruehen", "ok")))
                     continue
 
@@ -555,7 +574,7 @@ class Messreiter(ttk.Frame):
                     os.makedirs(os.path.join(self.lauf_ordner, "crops"), exist_ok=True)
                     cv2.imwrite(os.path.join(self.lauf_ordner, "crops",
                                              f"crop_{gemessen:05d}.png"),
-                                aus.ausschnitt(img))
+                                aus.ausschnitt(img, k["ausschnitt_rand"]))
                 m(("bild", ov)); m(("wert", maxd))
                 m(("status", (f"{aus.geraet_text} | Bild {gemessen} | max {maxd:.3f} mm | "
                               f"mittel {mittel_d:.3f} mm | {ppm_text} | "
@@ -575,6 +594,16 @@ class Messreiter(ttk.Frame):
                 m(("ende", None))
 
     # -------------------------------------------------- Teilschritte
+    def _crop_text(self, aus, shape):
+        """Welcher Bildausschnitt gilt - und ob er ueberhaupt gespeichert wird."""
+        f = aus.ausschnittsfeld(shape, self.kfg["ausschnitt_rand"])
+        if f is None:
+            return "keine Geometrie - kein Ausschnitt"
+        x0, y0, x1, y1 = f
+        return (f"{x1-x0}x{y1-y0} ab ({x0},{y0}) | Rand "
+                f"{self.kfg['ausschnitt_rand']} px um die Linie"
+                + ("" if self.kfg["crops_speichern"] else " | wird nicht gespeichert"))
+
     def _in_mm(self, dicke_px, aus):
         """Dicke in Pixeln -> Millimeter, an JEDER Stuetzstelle mit dem dort
         geltenden Massstab.
@@ -661,6 +690,8 @@ class Messreiter(ttk.Frame):
                     self.z_kamera.setzen(*nutz)
                 elif art == "ref":
                     self.z_ref.setzen(*nutz)
+                elif art == "crop":
+                    self.z_crop.setzen(*nutz)
                 elif art == "mess":
                     self.z_mess.setzen(*nutz)
                 elif art == "knopf":
