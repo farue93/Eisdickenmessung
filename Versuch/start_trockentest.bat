@@ -6,5 +6,11 @@ set "PY=py"
 where /q py && goto start
 set "PY=python"
 :start
-"%PY%" trockentest.py
-if errorlevel 1 pause
+echo ==== Module, Modelle, Rechenwerk, Kalibrierkette ====
+"%PY%" trockentest.py module
+echo.
+echo ==== Ordnerwache ====
+"%PY%" trockentest.py wache
+echo.
+echo Fenster mit einer Taste schliessen.
+pause >nul

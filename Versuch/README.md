@@ -19,9 +19,9 @@ mehr, das vorher laufen müsste.
 |---|---|
 | `start_laser.bat` → `messung_laser.py` | **Messoberfläche Laser-PC** |
 | `start_flaeche.bat` → `messung_flaeche.py` | **Messoberfläche Flächen-PC** |
-| `start_schachbrett.bat` → `schachbrett_drucken.py` | Druckvorlagen neu erzeugen |
-| `start_trockentest.bat` → `trockentest.py` | Vorabprüfung ohne Kamera |
-| `generalprobe.py` | ganzer Ablauf in einem Durchlauf, vor dem Messtag |
+| `start_trockentest.bat` → `trockentest.py` | **Vorabprüfung ohne Kamera** — am Versuchs-PC doppelklicken, das Fenster bleibt offen |
+| `generalprobe.py` | ganzer Ablauf in einem Durchlauf, vor dem Messtag (Konsole) |
+| `schachbrett_drucken.py` | Druckvorlagen neu erzeugen, z. B. mit anderer Feldgröße (Konsole) |
 | `README.md` | dieser Text — wird im Reiter *Anleitung* angezeigt |
 | `muster_A4_10mm_16x25.pdf`, `muster_A3_10mm_26x37.pdf` | Druckvorlagen |
 | `modelle/` | `laser.pt`, `flaeche.pt` — die trainierten Netze |
@@ -382,6 +382,10 @@ Laser neu ausgerichtet sind.
 ---
 
 ## Vor dem Messtag: einmal durchtesten
+
+**`start_trockentest.bat`** doppelklicken — prüft Abhängigkeiten, GPU, Modelle,
+Kalibrierkette und Ordnerwache und lässt das Fenster offen stehen. Einzeln geht
+auch:
 
 ```
 python trockentest.py module     Abhängigkeiten, GPU, Modelle, Kalibrierkette
